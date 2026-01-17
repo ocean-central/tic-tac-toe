@@ -5,11 +5,10 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 
-// security: replace the asterisk with "https://ocean-central.pages.dev" 
-// once you confirm your cloudflare pages domain is working.
+
 const io = new Server(server, {
     cors: {
-        origin: "*",
+        origin: "[https://ocean-central.pages.dev](https://ocean-central.pages.dev)",
         methods: ["GET", "POST"]
     }
 });
