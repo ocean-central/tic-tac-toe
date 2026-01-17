@@ -18,7 +18,14 @@ let queue = [];
 
 io.on('connection', (socket) => {
     console.log('user connected:', socket.id);
+    socket.on('make-move', (data) => {
+    // This sends the move to everyone in the room EXCEPT the sender
+    socket.to(data.room).emit('move-made', data);
+});
 
+socket.on('use-ability', (data) => {
+    socket.to(data.room).emit('ability-used', data);
+});
     socket.on('join-queue', (username) => {
         const safeName = username ? username.replace(/[^\w\s]/gi, '').substring(0, 20) : "guest";
         const player = { id: socket.id, name: safeName, socket };
