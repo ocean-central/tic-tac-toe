@@ -16,82 +16,84 @@ const io = new Server(server, {
 
 // State management
 let queue = [];
-let rooms = new Map();
+
+// Helper to broadcast player count to everyone connected
+const broadcastPlayerCount = () => {
+    io.emit('player-count', io.engine.clientsCount);
+};
 
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
-    
-    // Update global player count for everyone
-    io.emit('player-count', io.engine.clientsCount);
+    broadcastPlayerCount();
 
-    // Join Matchmaking Queue
+    // Matchmaking Logic
     socket.on('join-queue', (username) => {
-        // Remove from queue if already in it to prevent duplicates
+        // Prevent duplicate queue entries
         queue = queue.filter(player => player.id !== socket.id);
         
-        const newPlayer = { id: socket.id, username };
-        
         if (queue.length > 0) {
-            // Match found!
             const opponent = queue.shift();
-            const roomId = `room-${Date.now()}-${socket.id}`;
+            const roomId = `game-${socket.id}-${opponent.id}`;
             
-            // Join both to the socket room
+            // Join both players to the room
             socket.join(roomId);
             const opponentSocket = io.sockets.sockets.get(opponent.id);
-            if (opponentSocket) opponentSocket.join(roomId);
-
-            // Notify both players
-            // Symbol 'x' always goes first
-            socket.emit('match-found', {
-                room: roomId,
-                opponent: opponent.username,
-                symbol: 'x'
-            });
-
             if (opponentSocket) {
+                opponentSocket.join(roomId);
+
+                // Initialize Game: 'x' always goes first
+                socket.emit('match-found', {
+                    room: roomId,
+                    opponent: opponent.username,
+                    symbol: 'x'
+                });
+
                 opponentSocket.emit('match-found', {
                     room: roomId,
                     opponent: username,
                     symbol: 'o'
                 });
+                
+                console.log(`Match Started: ${username} vs ${opponent.username}`);
             }
-
-            console.log(`Match started in ${roomId}: ${username} vs ${opponent.username}`);
         } else {
-            // Add to queue
-            queue.push(newPlayer);
-            console.log(`${username} joined queue`);
+            queue.push({ id: socket.id, username });
+            console.log(`${username} added to queue`);
         }
     });
 
-    // Handle Game Moves
+    // Enhanced Move Synchronization
+    // We broadcast the entire board state to ensure complex ability effects
+    // like "Supernova" or "Scramble" reflect perfectly on both ends.
     socket.on('make-move', (data) => {
-        // Broadcast to everyone in the room except the sender
+        if (!data.room) return;
+        
         socket.to(data.room).emit('move-made', {
             index: data.index,
-            symbol: data.symbol
+            symbol: data.symbol,
+            newBoard: data.newBoard // Synchronizes full board state
         });
     });
 
-    // Handle Ability Usage
+    // Ability Relay
     socket.on('ability-used', (data) => {
-        // Relay ability info to the opponent
+        if (!data.room) return;
+        
         socket.to(data.room).emit('ability-used', {
             abilityId: data.abilityId,
             abilityName: data.abilityName
         });
     });
 
-    // Leave Queue manually
+    // Manual Queue Exit
     socket.on('leave-queue', () => {
-        queue = queue.filter(player => player.id !== socket.id);
+        queue = queue.filter(p => p.id !== socket.id);
     });
 
-    // Handle Disconnection
+    // Connection Cleanup
     socket.on('disconnect', () => {
-        queue = queue.filter(player => player.id !== socket.id);
-        io.emit('player-count', io.engine.clientsCount);
+        queue = queue.filter(p => p.id !== socket.id);
+        broadcastPlayerCount();
         console.log('User disconnected:', socket.id);
     });
 });
