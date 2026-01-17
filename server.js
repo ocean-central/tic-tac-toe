@@ -16,26 +16,30 @@ const io = new Server(server, {
 
 let queue = [];
 
-const broadcastPlayerCount = () => {
-    io.emit('player-count', io.engine.clientsCount);
+// Clean player counting that updates every single client
+const updateGlobalCount = () => {
+    const count = io.engine.clientsCount;
+    io.emit('player-count', count);
 };
 
 io.on('connection', (socket) => {
-    broadcastPlayerCount();
+    updateGlobalCount();
 
     socket.on('join-queue', (username) => {
-        queue = queue.filter(player => player.id !== socket.id);
+        // Clear any previous queue entries for this socket
+        queue = queue.filter(p => p.id !== socket.id);
         
         if (queue.length > 0) {
             const opponent = queue.shift();
-            const roomId = `game-${socket.id}-${opponent.id}`;
+            const roomId = `room_${socket.id}_${opponent.id}`;
             
             socket.join(roomId);
             const opponentSocket = io.sockets.sockets.get(opponent.id);
+            
             if (opponentSocket) {
                 opponentSocket.join(roomId);
 
-                // Sending BOTH players the opponent's name correctly
+                // Start game for both
                 socket.emit('match-found', {
                     room: roomId,
                     opponent: opponent.username,
@@ -55,21 +59,21 @@ io.on('connection', (socket) => {
 
     socket.on('make-move', (data) => {
         if (data.room) {
+            // Relays the entire board state and visual effects
             socket.to(data.room).emit('move-made', {
-                index: data.index,
-                symbol: data.symbol,
-                newBoard: data.newBoard
+                newBoard: data.newBoard,
+                effect: data.effect
             });
         }
     });
 
     socket.on('disconnect', () => {
         queue = queue.filter(p => p.id !== socket.id);
-        broadcastPlayerCount();
+        updateGlobalCount();
     });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server listening on port ${PORT}`);
 });
