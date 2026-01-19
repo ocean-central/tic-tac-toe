@@ -18,6 +18,7 @@ let queue = [];
 
 // Clean player counting that updates every single client
 const updateGlobalCount = () => {
+    // We use the room length for accuracy
     const count = io.engine.clientsCount;
     io.emit('player-count', count);
 };
@@ -60,6 +61,7 @@ io.on('connection', (socket) => {
     socket.on('make-move', (data) => {
         if (data.room) {
             // Relays the entire board state and visual effects
+            // Broadcast ensures everyone in the room except the sender gets the update
             socket.to(data.room).emit('move-made', {
                 newBoard: data.newBoard,
                 effect: data.effect
